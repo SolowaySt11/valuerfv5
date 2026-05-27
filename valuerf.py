@@ -1,6 +1,7 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 import requests
+import ejtrader  # <-- библиотека для акций Investing.com
 
 TOKEN = "8847119724:AAGudqiuhIdAoehPBwTCnJKywUmeoKxb7_E"
 
@@ -31,23 +32,23 @@ def get_metal_price(metal_name):
     except:
         return None
 
-# ---------- ЦЕНЫ АКЦИЙ ----------
+# ---------- ЦЕНЫ АКЦИЙ (через ejtrader, Investing.com) ----------
 def get_stock_price(ticker):
-    """ticker: 'GAZP', 'SBER', 'LKOH', 'YDEX'"""
-    url = f"https://iss.moex.com/iss/engines/stock/markets/shares/boards/tqbr/securities/{ticker}.json"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json, text/plain, */*"
-    }
+    """
+    Получает цену акции через ejtrader (неофициальный API Investing.com)
+    ticker: 'GAZP', 'SBER', 'LKOH', 'YDEX' и т.д.
+    """
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code == 200:
-            data = response.json()
-            price = data['marketdata']['data'][0][2]
-            return round(price, 2)
-        else:
-            print(f"MOEX ответил {response.status_code} для {ticker}")
-            return None
+        # Ищем акцию по тикеру
+        search = ejtrader.search_quotes(text=ticker, products=['stocks'], n_results=1)
+        if search:
+            # Берём последние исторические данные
+            recent = search.retrieve_recent_data()
+            if recent is not None and not recent.empty:
+                # Цена закрытия последнего торгового дня
+                last_price = recent['Close'].iloc[-1]
+                return round(last_price, 2)
+        return None
     except Exception as e:
         print(f"Ошибка при запросе {ticker}: {e}")
         return None
@@ -168,7 +169,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ========== АКЦИИ ==========
-    if data in ["GAZP", "SBER", "LKOH", "YNDX"]:
+    if data in ["GAZP", "SBER", "LKOH", "YDEX"]:
         price = get_stock_price(data)
         if price:
             if data == "GAZP":
